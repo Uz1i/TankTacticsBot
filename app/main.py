@@ -17,8 +17,9 @@ class Bot(discord.Client):
         await self.tree.sync(guild=GUILD)
 
 client = Bot()
-g = game.Game(db="", playerCount=20)
+g = game.Game(db="./players.db", playerCount=20)
 g.import_resources()
+g.setup_player_positions()
 
 @client.event
 async def on_ready() -> None:
@@ -44,13 +45,23 @@ async def showmaptest(interaction) -> None:
     print("Map test has run successfully!")
 
 @client.tree.command()
-async def move(interaction) -> None:
-    print("Move being made.")
-    embed = discord.Embed()
-    embed.colour = discord.Colour.blue()
-    embed.title = "Move: cool embed"
-    embed.description = "Pretty cool embed huh, wish it actually worked, maybe tmrw or smth\nin sha allah"
-    await interaction.response.send_message(embed=embed)
+@app_commands.describe(direction="Direction UP, DOWN, LEFT, RIGHT")
+async def move(interaction, direction: str) -> None:
+    result = g.cursor.execute("SELECT current_x, current_y FROM playerlist WHERE discord_uid = ?;", (interaction.user.id,))
+    start_pos = result.fetchone()
+    pos = g.update_position(start_pos, direction)
+    if not pos == None:
+        g.cursor.execute("UPDATE playerlist SET current_x = ?, current_y = ? WHERE discord_uid = ?;", pos+(interaction.user.id,))
+        embed = discord.Embed()
+        embed.colour = discord.Colour.blue()
+        embed.title = f"Move '{direction}' made!"
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        embed = discord.Embed()
+        embed.colour = discord.Colour.red()
+        embed.title = f"Move '{direction}' invalid!"
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 load_dotenv()
 token = getenv("DISCORD_TOKEN")
